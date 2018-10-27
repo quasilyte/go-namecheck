@@ -188,17 +188,17 @@ func parseRules(filename string) []*nameChecker {
 
 		// For performance reasons, we want literal matchers go first,
 		// regexp matchers go after them.
-		var mlist []nameMatcher
+		var list []nameMatcher
 		for _, m := range litMatchers {
-			mlist = append(mlist, m)
+			list = append(list, m)
 		}
 		for _, m := range reMatchers {
-			mlist = append(mlist, m)
+			list = append(list, m)
 		}
 
 		checkers = append(checkers, &nameChecker{
 			typeRE:   typeRE,
-			matchers: &nameMatcherList{list: mlist},
+			matchers: &nameMatcherList{list: list},
 		})
 	}
 
