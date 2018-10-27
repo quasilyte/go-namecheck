@@ -4,7 +4,7 @@
     },
 
     "regexp\\.Regexp": {
-        "re[A-Z]\\w*": "use RE suffix instead of re prefix"
+        "^re[A-Z]\\w*$": "use RE suffix instead of re prefix"
     },
 
     "^func\\(.*?\\)": {
