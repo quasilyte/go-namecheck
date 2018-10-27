@@ -100,9 +100,12 @@ func (ctxt *context) checkPackage(pkg *packages.Package) {
 			typ := removePointers(pkg.TypesInfo.TypeOf(id))
 			typeString := types.TypeString(typ, types.RelativeTo(pkg.Types))
 			matchers, ok := matchersCache[typeString]
-			if ok {
+			switch {
+			case ok && matchers == emptyMatchers:
+				ctxt.debugPrintf("%s: cache hit (non-interesting)", typeString)
+			case ok:
 				ctxt.debugPrintf("%s: cache hit", typeString)
-			} else {
+			default:
 				ctxt.debugPrintf("%s: checkers full scan", typeString)
 				for _, c := range ctxt.checkers {
 					if c.typeRE.MatchString(typeString) {
