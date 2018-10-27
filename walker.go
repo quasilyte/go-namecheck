@@ -8,10 +8,11 @@ import (
 )
 
 type walker struct {
-	pkg *packages.Package
+	pkg   *packages.Package
+	visit func(*ast.Ident)
 }
 
-func (w *walker) walkNames(f *ast.File, visit func(*ast.Ident)) {
+func (w *walker) walkNames(f *ast.File) {
 	// TODO(Quasilyte): walk function param names
 	// both in anonymous functions and in interface decls.
 
@@ -19,14 +20,14 @@ func (w *walker) walkNames(f *ast.File, visit func(*ast.Ident)) {
 		switch decl := decl.(type) {
 		case *ast.FuncDecl:
 			if decl.Recv != nil {
-				w.walkFieldList(decl.Recv.List, visit)
+				w.walkFieldList(decl.Recv.List)
 			}
-			w.walkFieldList(decl.Type.Params.List, visit)
+			w.walkFieldList(decl.Type.Params.List)
 			if decl.Type.Results != nil {
-				w.walkFieldList(decl.Type.Results.List, visit)
+				w.walkFieldList(decl.Type.Results.List)
 			}
 			if decl.Body != nil {
-				w.walkLocalNames(decl.Body, visit)
+				w.walkLocalNames(decl.Body)
 			}
 
 		case *ast.GenDecl:
@@ -34,22 +35,22 @@ func (w *walker) walkNames(f *ast.File, visit func(*ast.Ident)) {
 			case token.TYPE:
 				for _, spec := range decl.Specs {
 					spec := spec.(*ast.TypeSpec)
-					w.walkTypeExprNames(spec.Type, visit)
+					w.walkTypeExprNames(spec.Type)
 				}
 			}
 		}
 	}
 }
 
-func (w *walker) walkFieldList(fields []*ast.Field, visit func(*ast.Ident)) {
+func (w *walker) walkFieldList(fields []*ast.Field) {
 	for _, field := range fields {
 		for _, id := range field.Names {
-			visit(id)
+			w.visit(id)
 		}
 	}
 }
 
-func (w *walker) walkLocalNames(b *ast.BlockStmt, visit func(*ast.Ident)) {
+func (w *walker) walkLocalNames(b *ast.BlockStmt) {
 	ast.Inspect(b, func(x ast.Node) bool {
 		switch x := x.(type) {
 		case *ast.AssignStmt:
@@ -61,7 +62,7 @@ func (w *walker) walkLocalNames(b *ast.BlockStmt, visit func(*ast.Ident)) {
 				if !ok || w.pkg.TypesInfo.Defs[id] == nil {
 					continue
 				}
-				visit(id)
+				w.visit(id)
 			}
 			return false
 
@@ -73,7 +74,7 @@ func (w *walker) walkLocalNames(b *ast.BlockStmt, visit func(*ast.Ident)) {
 					return false
 				}
 				for _, id := range spec.Names {
-					visit(id)
+					w.visit(id)
 				}
 			}
 			return false
@@ -83,7 +84,7 @@ func (w *walker) walkLocalNames(b *ast.BlockStmt, visit func(*ast.Ident)) {
 	})
 }
 
-func (w *walker) walkTypeExprNames(e ast.Expr, visit func(*ast.Ident)) {
+func (w *walker) walkTypeExprNames(e ast.Expr) {
 	n, ok := e.(*ast.StructType)
 	if !ok {
 		return
@@ -91,11 +92,11 @@ func (w *walker) walkTypeExprNames(e ast.Expr, visit func(*ast.Ident)) {
 	for _, field := range n.Fields.List {
 		if n, ok := field.Type.(*ast.StructType); ok {
 			// Anonymous struct type. Need to visit its fields.
-			w.walkTypeExprNames(n, visit)
+			w.walkTypeExprNames(n)
 			continue
 		}
 		for _, id := range field.Names {
-			visit(id)
+			w.visit(id)
 		}
 	}
 }

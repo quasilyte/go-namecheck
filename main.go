@@ -96,7 +96,7 @@ func (ctxt *context) checkPackage(pkg *packages.Package) {
 	matchersCache := map[string]*nameMatcherList{}
 	w := walker{pkg: pkg}
 	for _, f := range pkg.Syntax {
-		w.walkNames(f, func(id *ast.Ident) {
+		w.visit = func(id *ast.Ident) {
 			typ := removePointers(pkg.TypesInfo.TypeOf(id))
 			typeString := types.TypeString(typ, types.RelativeTo(pkg.Types))
 			matchers, ok := matchersCache[typeString]
@@ -132,7 +132,8 @@ func (ctxt *context) checkPackage(pkg *packages.Package) {
 					m.Warning())
 				break
 			}
-		})
+		}
+		w.walkNames(f)
 	}
 }
 
