@@ -8,8 +8,18 @@ import (
 )
 
 type walker struct {
-	pkg   *packages.Package
-	visit func(*ast.Ident)
+	ctxt *context
+	pkg  *packages.Package
+
+	visit func(*[]*nameChecker, *ast.Ident)
+}
+
+func (w *walker) walkFunc(typ *ast.FuncType, body *ast.BlockStmt) {
+	w.walkFieldList(&w.ctxt.checkers.param, typ.Params.List)
+	// TODO(Quasilyte): add results scope and walk them?
+	if body != nil {
+		w.walkLocalNames(body)
+	}
 }
 
 func (w *walker) walkNames(f *ast.File) {
@@ -20,32 +30,20 @@ func (w *walker) walkNames(f *ast.File) {
 		switch decl := decl.(type) {
 		case *ast.FuncDecl:
 			if decl.Recv != nil {
-				w.walkFieldList(decl.Recv.List)
+				w.walkFieldList(&w.ctxt.checkers.receiver, decl.Recv.List)
 			}
-			w.walkFieldList(decl.Type.Params.List)
-			if decl.Type.Results != nil {
-				w.walkFieldList(decl.Type.Results.List)
-			}
-			if decl.Body != nil {
-				w.walkLocalNames(decl.Body)
-			}
+			w.walkFunc(decl.Type, decl.Body)
 
 		case *ast.GenDecl:
-			switch decl.Tok {
-			case token.TYPE:
-				for _, spec := range decl.Specs {
-					spec := spec.(*ast.TypeSpec)
-					w.walkTypeExprNames(spec.Type)
-				}
-			}
+			w.walkGenDecl(&w.ctxt.checkers.global, decl)
 		}
 	}
 }
 
-func (w *walker) walkFieldList(fields []*ast.Field) {
+func (w *walker) walkFieldList(checkers *[]*nameChecker, fields []*ast.Field) {
 	for _, field := range fields {
 		for _, id := range field.Names {
-			w.visit(id)
+			w.visit(checkers, id)
 		}
 	}
 }
@@ -53,6 +51,10 @@ func (w *walker) walkFieldList(fields []*ast.Field) {
 func (w *walker) walkLocalNames(b *ast.BlockStmt) {
 	ast.Inspect(b, func(x ast.Node) bool {
 		switch x := x.(type) {
+		case *ast.FuncLit:
+			w.walkFunc(x.Type, x.Body)
+			return false
+
 		case *ast.AssignStmt:
 			if x.Tok != token.DEFINE {
 				return false
@@ -62,26 +64,38 @@ func (w *walker) walkLocalNames(b *ast.BlockStmt) {
 				if !ok || w.pkg.TypesInfo.Defs[id] == nil {
 					continue
 				}
-				w.visit(id)
+				w.visit(&w.ctxt.checkers.local, id)
 			}
 			return false
 
 		case *ast.GenDecl:
-			// Decls always introduce new names.
-			for _, spec := range x.Specs {
-				spec, ok := spec.(*ast.ValueSpec)
-				if !ok { // Ignore type/import specs
-					return false
-				}
-				for _, id := range spec.Names {
-					w.visit(id)
-				}
-			}
+			w.walkGenDecl(&w.ctxt.checkers.local, x)
 			return false
 		}
 
 		return true
 	})
+}
+
+func (w *walker) walkGenDecl(checkers *[]*nameChecker, decl *ast.GenDecl) {
+	switch decl.Tok {
+	case token.VAR, token.CONST:
+		for _, spec := range decl.Specs {
+			spec := spec.(*ast.ValueSpec)
+			w.walkIdentList(checkers, spec.Names)
+		}
+	case token.TYPE:
+		for _, spec := range decl.Specs {
+			spec := spec.(*ast.TypeSpec)
+			w.walkTypeExprNames(spec.Type)
+		}
+	}
+}
+
+func (w *walker) walkIdentList(checkers *[]*nameChecker, idents []*ast.Ident) {
+	for _, id := range idents {
+		w.visit(checkers, id)
+	}
 }
 
 func (w *walker) walkTypeExprNames(e ast.Expr) {
@@ -96,7 +110,7 @@ func (w *walker) walkTypeExprNames(e ast.Expr) {
 			continue
 		}
 		for _, id := range field.Names {
-			w.visit(id)
+			w.visit(&w.ctxt.checkers.field, id)
 		}
 	}
 }

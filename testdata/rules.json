@@ -1,13 +1,15 @@
 {
     "^context\\.Context$|^\\w+Context$|^[Cc]ontext$": {
-        "ctx": "ctxt"
+        "param+field": {"ctx": "ctxt"}
     },
 
     "regexp\\.Regexp": {
-        "^re[A-Z]\\w*$": "use RE suffix instead of re prefix"
+        "local+global": {
+            "^re[A-Z]\\w*$": "use RE suffix instead of re prefix (global)"
+        }
     },
 
     "^func\\(.*?\\)": {
-        "f": "fn"
+        "param": {"f": "fn"}
     }
 }

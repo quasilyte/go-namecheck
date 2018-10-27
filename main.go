@@ -37,11 +37,11 @@ func main() {
 	}
 
 	ctxt := &context{
-		checkers: parseRules(*rulesFilename),
-		fset:     token.NewFileSet(),
-		verbose:  *verbose,
-		debug:    *debug,
+		fset:    token.NewFileSet(),
+		verbose: *verbose,
+		debug:   *debug,
 	}
+	parseRules(ctxt, *rulesFilename)
 
 	cfg := &packages.Config{
 		Mode:  packages.LoadSyntax,
@@ -81,8 +81,15 @@ func main() {
 }
 
 type context struct {
-	checkers []*nameChecker
-	fset     *token.FileSet
+	checkers struct {
+		param    []*nameChecker
+		receiver []*nameChecker
+		global   []*nameChecker
+		local    []*nameChecker
+		field    []*nameChecker
+	}
+
+	fset *token.FileSet
 
 	verbose bool
 	debug   bool
@@ -93,13 +100,18 @@ func (ctxt *context) checkPackage(pkg *packages.Package) {
 
 	emptyMatchers := &nameMatcherList{}
 
-	matchersCache := map[string]*nameMatcherList{}
-	w := walker{pkg: pkg}
+	type cacheKey struct {
+		scopeSpan  *[]*nameChecker
+		typeString string
+	}
+	matchersCache := map[cacheKey]*nameMatcherList{}
+	w := walker{ctxt: ctxt, pkg: pkg}
 	for _, f := range pkg.Syntax {
-		w.visit = func(id *ast.Ident) {
+		w.visit = func(checkers *[]*nameChecker, id *ast.Ident) {
 			typ := removePointers(pkg.TypesInfo.TypeOf(id))
 			typeString := types.TypeString(typ, types.RelativeTo(pkg.Types))
-			matchers, ok := matchersCache[typeString]
+			key := cacheKey{checkers, typeString}
+			matchers, ok := matchersCache[key]
 			switch {
 			case ok && matchers == emptyMatchers:
 				ctxt.debugPrintf("%s: cache hit (non-interesting)", typeString)
@@ -107,16 +119,16 @@ func (ctxt *context) checkPackage(pkg *packages.Package) {
 				ctxt.debugPrintf("%s: cache hit", typeString)
 			default:
 				ctxt.debugPrintf("%s: checkers full scan", typeString)
-				for _, c := range ctxt.checkers {
+				for _, c := range *checkers {
 					if c.typeRE.MatchString(typeString) {
-						matchersCache[typeString] = c.matchers
+						matchersCache[key] = c.matchers
 						matchers = c.matchers
 						break
 					}
 				}
 				if matchers == nil {
 					ctxt.debugPrintf("%s: mark as non-interesting", typeString)
-					matchersCache[typeString] = emptyMatchers
+					matchersCache[key] = emptyMatchers
 					return
 				}
 			}
@@ -149,10 +161,8 @@ func (ctxt *context) infoPrintf(format string, args ...interface{}) {
 	}
 }
 
-func parseRules(filename string) []*nameChecker {
-	var checkers []*nameChecker
-
-	var config map[string]map[string]string
+func parseRules(ctxt *context, filename string) {
+	var config map[string]map[string]map[string]string
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		log.Fatalf("read -rules JSON file: %v", err)
@@ -161,49 +171,67 @@ func parseRules(filename string) []*nameChecker {
 		log.Fatalf("parse -rules JSON file: %v", err)
 	}
 
-	for pattern, nameMatcherProps := range config {
+	for pattern, nameMatcherScopes := range config {
 		typeRE, err := regexp.Compile(pattern)
 		if err != nil {
 			log.Fatalf("decode rules: type regexp %q: %v", pattern, err)
 		}
 
-		var litMatchers []*literalNameMatcher
-		var reMatchers []*regexpNameMatcher
-		for k, v := range nameMatcherProps {
-			if regexp.QuoteMeta(k) == k {
-				litMatchers = append(litMatchers, &literalNameMatcher{
-					from:    k,
-					warning: fmt.Sprintf("rename to %s", v),
+		for scopes, nameMatcherProps := range nameMatcherScopes {
+			var litMatchers []*literalNameMatcher
+			var reMatchers []*regexpNameMatcher
+
+			for k, v := range nameMatcherProps {
+				if regexp.QuoteMeta(k) == k {
+					litMatchers = append(litMatchers, &literalNameMatcher{
+						from:    k,
+						warning: fmt.Sprintf("rename to %s", v),
+					})
+					continue
+				}
+				re, err := regexp.Compile(k)
+				if err != nil {
+					log.Fatalf("decode rules: %q: %q: %v", pattern, k, err)
+				}
+				reMatchers = append(reMatchers, &regexpNameMatcher{
+					re:      re,
+					warning: v,
 				})
-				continue
 			}
-			re, err := regexp.Compile(k)
-			if err != nil {
-				log.Fatalf("decode rules: %q: %q: %v", pattern, k, err)
+
+			// For performance reasons, we want literal matchers go first,
+			// regexp matchers go after them.
+			var list []nameMatcher
+			for _, m := range litMatchers {
+				list = append(list, m)
 			}
-			reMatchers = append(reMatchers, &regexpNameMatcher{
-				re:      re,
-				warning: v,
-			})
-		}
+			for _, m := range reMatchers {
+				list = append(list, m)
+			}
 
-		// For performance reasons, we want literal matchers go first,
-		// regexp matchers go after them.
-		var list []nameMatcher
-		for _, m := range litMatchers {
-			list = append(list, m)
-		}
-		for _, m := range reMatchers {
-			list = append(list, m)
-		}
+			checker := &nameChecker{
+				typeRE:   typeRE,
+				matchers: &nameMatcherList{list: list},
+			}
 
-		checkers = append(checkers, &nameChecker{
-			typeRE:   typeRE,
-			matchers: &nameMatcherList{list: list},
-		})
+			for _, scope := range strings.Split(scopes, "+") {
+				switch scope {
+				case "param":
+					ctxt.checkers.param = append(ctxt.checkers.param, checker)
+				case "receiver":
+					ctxt.checkers.receiver = append(ctxt.checkers.receiver, checker)
+				case "global":
+					ctxt.checkers.global = append(ctxt.checkers.global, checker)
+				case "local":
+					ctxt.checkers.local = append(ctxt.checkers.local, checker)
+				case "field":
+					ctxt.checkers.field = append(ctxt.checkers.field, checker)
+				default:
+					log.Fatalf("decode rules: %q: bad scope: %q", pattern, scope)
+				}
+			}
+		}
 	}
-
-	return checkers
 }
 
 type nameChecker struct {
