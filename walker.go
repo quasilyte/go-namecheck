@@ -25,7 +25,9 @@ func (w *walker) walkNames(f *ast.File, visit func(*ast.Ident)) {
 			if decl.Type.Results != nil {
 				w.walkFieldList(decl.Type.Results.List, visit)
 			}
-			w.walkLocalNames(decl.Body, visit)
+			if decl.Body != nil {
+				w.walkLocalNames(decl.Body, visit)
+			}
 
 		case *ast.GenDecl:
 			switch decl.Tok {
