@@ -1,0 +1,13 @@
+{
+    "^context\\.Context$|^\\w+Context$|^[Cc]ontext$": {
+        "ctx": "ctxt"
+    },
+
+    "regexp\\.Regexp": {
+        "re[A-Z]\\w*": "use RE suffix instead of re prefix"
+    },
+
+    "^func\\(.*?\\)": {
+        "f": "fn"
+    }
+}
