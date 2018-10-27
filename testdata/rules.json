@@ -5,7 +5,7 @@
 
     "regexp\\.Regexp": {
         "local+global": {
-            "^re[A-Z]\\w*$": "use RE suffix instead of re prefix (global)"
+            "^re[A-Z]\\w*$": "use RE suffix instead of re prefix"
         }
     },
 
