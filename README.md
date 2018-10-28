@@ -28,7 +28,7 @@ For a better illustration, suppose we also want to catch regexp
 variables that use `re` prefix and propose `RE` suffix instead,
 so `var reFoo *regexp.Regexp` becomes `var fooRE *regexp.Regexp`.
 
-```
+```json
 {
   "string": {"param": {"str": "s"}},
   "regexp\\.Regexp": {
