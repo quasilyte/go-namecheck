@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/go-toolsmith/pkgload"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -59,25 +60,17 @@ func main() {
 	// we're going to check them during the second traversal
 	// which visits normal package if only it was
 	// not checked during the first traversal.
-	withTests := map[string]bool{}
-	for _, pkg := range pkgs {
-		if !strings.Contains(pkg.ID, ".test]") {
-			continue
+	pkgload.VisitUnits(pkgs, func(u *pkgload.Unit) {
+		if u.ExternalTest != nil {
+			ctxt.checkPackage(u.ExternalTest)
 		}
-		ctxt.checkPackage(pkg)
-		withTests[pkg.PkgPath] = true
-	}
-	for _, pkg := range pkgs {
-		if strings.HasSuffix(pkg.PkgPath, ".test") {
-			continue
+		if u.Test != nil {
+			// Prefer tests to the base package, if present.
+			ctxt.checkPackage(u.Test)
+		} else {
+			ctxt.checkPackage(u.Base)
 		}
-		if pkg.ID != pkg.PkgPath {
-			continue
-		}
-		if !withTests[pkg.PkgPath] {
-			ctxt.checkPackage(pkg)
-		}
-	}
+	})
 }
 
 type context struct {
