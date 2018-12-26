@@ -73,6 +73,8 @@ func main() {
 	})
 }
 
+var generatedFileCommentRE = regexp.MustCompile("Code generated .* DO NOT EDIT.")
+
 type context struct {
 	checkers struct {
 		param    []*nameChecker
@@ -100,6 +102,12 @@ func (ctxt *context) checkPackage(pkg *packages.Package) {
 	matchersCache := map[cacheKey]*nameMatcherList{}
 	w := walker{ctxt: ctxt, pkg: pkg}
 	for _, f := range pkg.Syntax {
+		isGenerated := len(f.Comments) != 0 &&
+			generatedFileCommentRE.MatchString(f.Comments[0].Text())
+		if isGenerated {
+			continue
+		}
+
 		w.visit = func(checkers *[]*nameChecker, id *ast.Ident) {
 			typ := removePointers(pkg.TypesInfo.TypeOf(id))
 			typeString := types.TypeString(typ, types.RelativeTo(pkg.Types))
@@ -154,7 +162,7 @@ func (ctxt *context) infoPrintf(format string, args ...interface{}) {
 	}
 }
 
-func parseRules(ctxt *context, filename string) {
+func parseRules(ctxt *context, filename string) error {
 	var config map[string]map[string]map[string]string
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
