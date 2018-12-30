@@ -233,6 +233,8 @@ func parseRules(ctxt *context, filename string) error {
 			}
 		}
 	}
+
+	return nil
 }
 
 type nameChecker struct {
