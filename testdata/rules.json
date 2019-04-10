@@ -9,6 +9,9 @@
         }
     },
 
+    "testing.T": {"param": {".*": "use t for testing.T params"}},
+    "testing.B": {"param": {".*": "use b for testing.B params"}},
+
     "^func\\(.*?\\)": {
         "param": {"f": "fn"}
     }
