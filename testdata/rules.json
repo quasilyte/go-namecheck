@@ -9,8 +9,18 @@
         }
     },
 
-    "testing.T": {"param": {".*": "use t for testing.T params"}},
-    "testing.B": {"param": {".*": "use b for testing.B params"}},
+    "testing.T": {
+        "param": {
+            "tst": "t",
+            "test": "t"
+        }
+    },
+    "testing.B": {
+        "param": {
+            "t": "b",
+            "bench": "b"
+        }
+    },
 
     "^func\\(.*?\\)": {
         "param": {"f": "fn"}
