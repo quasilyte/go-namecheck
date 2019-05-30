@@ -7,7 +7,7 @@ Source code analyzer that helps you to maintain variable/field naming convention
 To install `go-namecheck` binary under your `$(go env GOPATH)/bin`:
 
 ```bash
-go get -v github.com/Quasilyte/go-namecheck
+go get -v github.com/quasilyte/go-namecheck
 ```
 
 If `$GOPATH/bin` is under your system `$PATH`, `go-namecheck` command should be available after that.<br>
